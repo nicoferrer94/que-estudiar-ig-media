@@ -1,0 +1,41 @@
+name: Publicar reel
+on:
+  schedule:
+    # 12:30 y 20:00 ART (UTC-3) = 15:30 y 23:00 UTC; reintenta cada 15 min hasta 3 h después
+    - cron: "30,45 15 * * *"
+    - cron: "*/15 16-18 * * *"
+    - cron: "*/15 23 * * *"
+    - cron: "*/15 0-1 * * *"
+  workflow_dispatch:
+    inputs:
+      dry_run:
+        description: "1 = probar sin publicar"
+        default: "1"
+      forzar_horario:
+        description: "Horario a publicar ya (ej. 2026-11-13T12:30), vacío = el que toque"
+        default: ""
+concurrency:
+  group: publicar
+  cancel-in-progress: false
+permissions:
+  contents: write
+jobs:
+  publicar:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - name: Publicar
+        env:
+          IG_ACCESS_TOKEN: ${{ secrets.IG_ACCESS_TOKEN }}
+          IG_USER_ID: ${{ secrets.IG_USER_ID }}
+          DRY_RUN: ${{ github.event.inputs.dry_run }}
+          FORZAR_HORARIO: ${{ github.event.inputs.forzar_horario }}
+        run: python3 publicar_nube.py
+      - name: Guardar estado
+        if: always()
+        run: |
+          git config user.name "publicador-nube"
+          git config user.email "actions@github.com"
+          git add -A cola publicados estado.json
+          git diff --cached --quiet || (git commit -m "publicado $(date -u +%FT%H:%M)" && git pull --rebase -q && git push)
